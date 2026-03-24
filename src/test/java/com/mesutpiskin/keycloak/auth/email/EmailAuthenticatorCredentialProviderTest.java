@@ -33,18 +33,42 @@ class EmailAuthenticatorCredentialProviderTest {
     }
 
     @Test
-    void testIsConfiguredFor_WithStoredCredential() {
+    void testIsConfiguredFor_WithStoredCredentialAndEmail() {
+        when(user.getEmail()).thenReturn("user@example.com");
         var credential = new EmailAuthenticatorCredentialModel();
         when(credentialManager.getStoredCredentialsByTypeStream(EmailAuthenticatorCredentialModel.TYPE_ID))
                 .thenReturn(Stream.of(credential));
 
         boolean result = provider.isConfiguredFor(realm, user, EmailAuthenticatorCredentialModel.TYPE_ID);
 
-        assertTrue(result, "Should be configured when a stored credential exists");
+        assertTrue(result, "Should be configured when email is present and a stored credential exists");
+    }
+
+    @Test
+    void testIsConfiguredFor_WithBlankEmail() {
+        when(user.getEmail()).thenReturn("   ");
+        when(credentialManager.getStoredCredentialsByTypeStream(EmailAuthenticatorCredentialModel.TYPE_ID))
+                .thenReturn(Stream.of(new EmailAuthenticatorCredentialModel()));
+
+        boolean result = provider.isConfiguredFor(realm, user, EmailAuthenticatorCredentialModel.TYPE_ID);
+
+        assertFalse(result, "Should not be configured when the email is blank");
+    }
+
+    @Test
+    void testIsConfiguredFor_WithNullEmail() {
+        when(user.getEmail()).thenReturn(null);
+        when(credentialManager.getStoredCredentialsByTypeStream(EmailAuthenticatorCredentialModel.TYPE_ID))
+                .thenReturn(Stream.of(new EmailAuthenticatorCredentialModel()));
+
+        boolean result = provider.isConfiguredFor(realm, user, EmailAuthenticatorCredentialModel.TYPE_ID);
+
+        assertFalse(result, "Should not be configured when the email is null");
     }
 
     @Test
     void testIsConfiguredFor_WithNoStoredCredential() {
+        when(user.getEmail()).thenReturn("user@example.com");
         when(credentialManager.getStoredCredentialsByTypeStream(EmailAuthenticatorCredentialModel.TYPE_ID))
                 .thenReturn(Stream.empty());
 
@@ -55,6 +79,8 @@ class EmailAuthenticatorCredentialProviderTest {
 
     @Test
     void testIsConfiguredFor_WrongCredentialType() {
+        when(user.getEmail()).thenReturn("user@example.com");
+
         boolean result = provider.isConfiguredFor(realm, user, "wrong-type");
 
         assertFalse(result, "Should return false for unsupported credential type");
