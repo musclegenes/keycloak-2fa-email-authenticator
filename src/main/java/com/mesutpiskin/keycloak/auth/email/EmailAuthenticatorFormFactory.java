@@ -87,6 +87,24 @@ public class EmailAuthenticatorFormFactory implements AuthenticatorFactory {
                         "Sender display name for AWS SES (optional, defaults to from email).",
                         ProviderConfigProperty.STRING_TYPE, null),
 
+                // Mailgun configuration
+                new ProviderConfigProperty(EmailConstants.MAILGUN_API_KEY, "Mailgun API Key",
+                        "Mailgun API key (required when Email Provider is set to MAILGUN).",
+                        ProviderConfigProperty.PASSWORD, null),
+                new ProviderConfigProperty(EmailConstants.MAILGUN_DOMAIN, "Mailgun Domain",
+                        "Mailgun sending domain, e.g. mg.example.com (required when Email Provider is set to MAILGUN).",
+                        ProviderConfigProperty.STRING_TYPE, null),
+                new ProviderConfigProperty(EmailConstants.MAILGUN_FROM_EMAIL, "Mailgun From Email",
+                        "Sender email address for Mailgun (required when Email Provider is set to MAILGUN).",
+                        ProviderConfigProperty.STRING_TYPE, null),
+                new ProviderConfigProperty(EmailConstants.MAILGUN_FROM_NAME, "Mailgun From Name",
+                        "Sender display name for Mailgun (optional, defaults to from email).",
+                        ProviderConfigProperty.STRING_TYPE, null),
+                new ProviderConfigProperty(EmailConstants.MAILGUN_REGION, "Mailgun Region",
+                        "Mailgun API region: US (default) or EU. Use EU if your Mailgun account is on the EU region.",
+                        ProviderConfigProperty.LIST_TYPE, EmailConstants.DEFAULT_MAILGUN_REGION,
+                        new String[]{"US", "EU"}),
+
                 new ProviderConfigProperty(EmailConstants.ENABLE_FALLBACK, "Enable Fallback to Keycloak SMTP",
                         "If enabled, falls back to Keycloak SMTP when the primary provider fails.",
                         ProviderConfigProperty.BOOLEAN_TYPE, String.valueOf(EmailConstants.DEFAULT_ENABLE_FALLBACK)),
@@ -106,7 +124,13 @@ public class EmailAuthenticatorFormFactory implements AuthenticatorFactory {
                         ProviderConfigProperty.STRING_TYPE, String.valueOf(EmailConstants.DEFAULT_RESEND_COOLDOWN)),
                 new ProviderConfigProperty(EmailConstants.MAX_ATTEMPTS, "Max Code Attempts",
                         "The maximum number of invalid code attempts before the code is invalidated and a new one must be requested.",
-                        ProviderConfigProperty.STRING_TYPE, String.valueOf(EmailConstants.DEFAULT_MAX_ATTEMPTS)));
+                        ProviderConfigProperty.STRING_TYPE, String.valueOf(EmailConstants.DEFAULT_MAX_ATTEMPTS)),
+                new ProviderConfigProperty(EmailConstants.SHOW_MASKED_EMAIL_ON_OTP_FORM, "Show Masked Email on OTP Form",
+                        "If enabled, displays a masked version of the user's email address on the OTP entry form after the code is sent.",
+                        ProviderConfigProperty.BOOLEAN_TYPE, String.valueOf(EmailConstants.DEFAULT_SHOW_MASKED_EMAIL_ON_OTP_FORM)),
+                new ProviderConfigProperty(EmailConstants.SKIP_SETUP, "Treat any user with an email as configured",
+                        "When enabled, users with an email address are reported as configured for the email authenticator even if they have never enrolled — useful for admin-provisioned 2FA and for showing the plugin in 'Try Another Way' alternatives. Leave disabled (default) when you rely on 'Conditional - User Configured' sub-flows: the conditional only triggers for users who have actually enrolled.",
+                        ProviderConfigProperty.BOOLEAN_TYPE, String.valueOf(EmailConstants.DEFAULT_SKIP_SETUP)));
     }
 
     @Override

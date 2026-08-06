@@ -240,6 +240,10 @@ Click **⚙️ (Settings)** icon on "Email OTP" row:
 - **Time-to-live:** 300 (5 minutes)
 - **Simulation mode:** false (for real emails)
 - **Resend cooldown:** 30 (seconds)
+- **Max code attempts:** 5
+- **Show Masked Email on OTP Form:** false by default
+
+If you enable **Show Masked Email on OTP Form**, the login form shows a server-generated masked value such as `u***e@example.com` after the OTP is sent. This does not rely on `${user.email!}` being available in the Freemarker template context.
 
 ---
 

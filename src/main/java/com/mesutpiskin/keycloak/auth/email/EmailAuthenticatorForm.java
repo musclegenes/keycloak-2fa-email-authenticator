@@ -23,6 +23,7 @@ import org.keycloak.credential.CredentialProvider;
 import org.jboss.logging.Logger;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -137,7 +138,8 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         } else {
             sendEmailWithCode(context, code, ttl);
         }
-        session.setAuthNote(EmailConstants.CODE, code);
+
+        session.setAuthNote(EmailConstants.CODE, OtpHashUtils.hash(code));
         long now = System.currentTimeMillis();
         session.setAuthNote(EmailConstants.CODE_TTL, Long.toString(now + (ttl * 1000L)));
         session.setAuthNote(EmailConstants.CODE_RESEND_AVAILABLE_AFTER, Long.toString(now + (resendCooldown * 1000L)));
@@ -275,31 +277,37 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
             return false;
         }
 
-        if (codeContext.submittedCode().equals(codeContext.storedCode()))
+        if (OtpHashUtils.matches(codeContext.submittedCode(), codeContext.storedCode())) {
             return true;
+        }
 
         context.getEvent().user(user).error(Errors.INVALID_USER_CREDENTIALS);
 
-        AuthenticationSessionModel session = context.getAuthenticationSession();
-        int attempts = incrementAttempts(session);
-
-        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
-        Map<String, String> configValues = config != null && config.getConfig() != null
-                ? config.getConfig()
-                : Map.of();
-        int maxAttempts = resolvePositiveInt(configValues, EmailConstants.MAX_ATTEMPTS,
-                EmailConstants.DEFAULT_MAX_ATTEMPTS);
-
-        if (attempts >= maxAttempts) {
-            resetEmailCode(context);
-            LoginFormsProvider form = prepareForm(context, null);
-            form.setAttribute("maxAttemptsReached", true);
-            applyFormMessage(form, "email-authenticator-too-many-attempts", EmailConstants.CODE);
-            Response challengeResponse = form.createForm("email-code-form.ftl");
-            context.failureChallenge(AuthenticationFlowError.INVALID_CREDENTIALS, challengeResponse);
-        } else {
+        if (context.getRealm().isBruteForceProtected()) {
             Response challengeResponse = challenge(context, Messages.INVALID_ACCESS_CODE, EmailConstants.CODE);
             context.failureChallenge(AuthenticationFlowError.INVALID_CREDENTIALS, challengeResponse);
+        } else {
+            AuthenticationSessionModel session = context.getAuthenticationSession();
+            int attempts = incrementAttempts(session);
+
+            AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+            Map<String, String> configValues = config != null && config.getConfig() != null
+                    ? config.getConfig()
+                    : Map.of();
+            int maxAttempts = resolvePositiveInt(configValues, EmailConstants.MAX_ATTEMPTS,
+                    EmailConstants.DEFAULT_MAX_ATTEMPTS);
+
+            if (attempts >= maxAttempts) {
+                resetEmailCode(context);
+                LoginFormsProvider form = prepareForm(context, null);
+                form.setAttribute("maxAttemptsReached", true);
+                applyFormMessage(form, "email-authenticator-too-many-attempts", EmailConstants.CODE);
+                Response challengeResponse = form.createForm("email-code-form.ftl");
+                context.failureChallenge(AuthenticationFlowError.INVALID_CREDENTIALS, challengeResponse);
+            } else {
+                Response challengeResponse = challenge(context, Messages.INVALID_ACCESS_CODE, EmailConstants.CODE);
+                context.failureChallenge(AuthenticationFlowError.INVALID_CREDENTIALS, challengeResponse);
+            }
         }
         return false;
     }
@@ -308,10 +316,56 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         AuthenticationSessionModel session = context.getAuthenticationSession();
         LoginFormsProvider form = context.form().setExecution(context.getExecution().getId());
         Long secondsToExpose = remainingSeconds != null ? remainingSeconds : getRemainingSeconds(session);
-        if (secondsToExpose != null && secondsToExpose > 0L)
+        if (secondsToExpose != null && secondsToExpose > 0L) {
             form.setAttribute("resendAvailableInSeconds", secondsToExpose);
+        }
+
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        Map<String, String> configValues = config != null && config.getConfig() != null
+                ? config.getConfig()
+                : Map.of();
+        int codeLength = resolvePositiveInt(configValues, EmailConstants.CODE_LENGTH, EmailConstants.DEFAULT_LENGTH);
+        form.setAttribute("codeLength", codeLength);
+
+        if (isMaskedEmailVisible(configValues)) {
+            String maskedEmail = maskEmailAddress(context.getUser());
+            if (maskedEmail != null) {
+                form.setAttribute("maskedEmail", maskedEmail);
+            }
+        }
 
         return form;
+    }
+
+    private boolean isMaskedEmailVisible(Map<String, String> configValues) {
+        return Boolean.parseBoolean(configValues.getOrDefault(
+                EmailConstants.SHOW_MASKED_EMAIL_ON_OTP_FORM,
+                String.valueOf(EmailConstants.DEFAULT_SHOW_MASKED_EMAIL_ON_OTP_FORM)));
+    }
+
+    private String maskEmailAddress(UserModel user) {
+        if (user == null) {
+            return null;
+        }
+
+        String email = user.getEmail();
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0 || atIndex == email.length() - 1) {
+            return email;
+        }
+
+        String localPart = email.substring(0, atIndex);
+        String domainPart = email.substring(atIndex);
+
+        if (localPart.length() <= 2) {
+            return localPart.charAt(0) + "***" + domainPart;
+        }
+
+        return localPart.charAt(0) + "***" + localPart.charAt(localPart.length() - 1) + domainPart;
     }
 
     private Long getRemainingSeconds(AuthenticationSessionModel session) {
@@ -374,9 +428,85 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         return true;
     }
 
+    /**
+     * Eligibility rules for the email authenticator:
+     * <ol>
+     * <li>A user with a stored email-authenticator credential is always
+     * configured.</li>
+     * <li>A user without an email address is never configured — the
+     * authenticator has nowhere to send the OTP.</li>
+     * <li>Otherwise, the user is reported as configured only when an admin has
+     * explicitly opted in to the "any user with email is eligible" behaviour by
+     * setting {@link EmailConstants#SKIP_SETUP skipSetup} = {@code true} on at
+     * least one email-authenticator execution in the realm.</li>
+     * </ol>
+     * The default ({@code skipSetup=false}) is intentional: it matches the
+     * Keycloak convention that {@code configuredFor=true} means "the user has
+     * enrolled this credential", so "Conditional - User Configured" sub-flows
+     * are not triggered for users who have neither enrolled nor been explicitly
+     * targeted by the admin's flow design.
+     */
     @Override
     public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
-        return getCredentialProvider(session).isConfiguredFor(realm, user, getType(session));
+        if (user == null) {
+            return false;
+        }
+
+        String email = user.getEmail();
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+
+        if (hasStoredEmailCredential(user)) {
+            return true;
+        }
+
+        return isSkipSetupEnabledForRealm(realm);
+    }
+
+    private boolean hasStoredEmailCredential(UserModel user) {
+        var credentialManager = user.credentialManager();
+        if (credentialManager == null) {
+            return false;
+        }
+        return credentialManager
+                .getStoredCredentialsByTypeStream(EmailAuthenticatorCredentialModel.TYPE_ID)
+                .findAny()
+                .isPresent();
+    }
+
+    /**
+     * Looks up the {@code skipSetup} flag on any email-authenticator (regular or
+     * conditional) execution in the realm. A single explicit {@code true} opts
+     * the realm into the permissive eligibility model; otherwise the strict
+     * default applies. This scan is intentionally kept in the form authenticator
+     * (not the credential provider) so the provider keeps the clean contract
+     * introduced for issue #129 (stored credentials only).
+     */
+    private boolean isSkipSetupEnabledForRealm(RealmModel realm) {
+        if (realm == null) {
+            return EmailConstants.DEFAULT_SKIP_SETUP;
+        }
+        return realm.getAuthenticationFlowsStream()
+                .flatMap(flow -> realm.getAuthenticationExecutionsStream(flow.getId()))
+                .filter(exec -> EmailAuthenticatorFormFactory.PROVIDER_ID.equals(exec.getAuthenticator())
+                        || ConditionalEmailAuthenticatorFormFactory.PROVIDER_ID.equals(exec.getAuthenticator()))
+                .map(exec -> {
+                    String configId = exec.getAuthenticatorConfig();
+                    if (configId == null) {
+                        return null;
+                    }
+                    AuthenticatorConfigModel cfg = realm.getAuthenticatorConfigById(configId);
+                    if (cfg == null || cfg.getConfig() == null) {
+                        return null;
+                    }
+                    return cfg.getConfig().get(EmailConstants.SKIP_SETUP);
+                })
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> Boolean.parseBoolean(value.trim()))
+                .filter(Boolean::booleanValue)
+                .findAny()
+                .orElse(EmailConstants.DEFAULT_SKIP_SETUP);
     }
 
     @Override
@@ -385,9 +515,18 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                 EmailAuthenticatorCredentialProviderFactory.PROVIDER_ID);
     }
 
+    /**
+     * No automatic required action is registered. Voluntary enrolment remains
+     * available via {@link EmailAuthenticatorRequiredAction} (account console).
+     * Admins who want to force enrolment for non-configured users can either
+     * add the 'email-authenticator-setup' required action manually, or set
+     * {@link EmailConstants#SKIP_SETUP skipSetup}={@code true} on the
+     * authenticator execution so users with an email are considered configured
+     * without enrolment.
+     */
     @Override
     public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
-        user.addRequiredAction(EmailAuthenticatorRequiredAction.PROVIDER_ID);
+        // intentional no-op
     }
 
     @Override

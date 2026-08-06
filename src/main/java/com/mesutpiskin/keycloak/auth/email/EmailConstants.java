@@ -152,6 +152,83 @@ public final class EmailConstants {
 	 */
 	public static final boolean DEFAULT_ENABLE_FALLBACK = true;
 
+	// Mailgun Configuration
+
+	/**
+	 * Configuration key for Mailgun API key.
+	 * Required when EMAIL_PROVIDER_TYPE is set to MAILGUN.
+	 */
+	public static final String MAILGUN_API_KEY = "mailgunApiKey";
+
+	/**
+	 * Configuration key for Mailgun sending domain (e.g., mg.example.com).
+	 * Required when EMAIL_PROVIDER_TYPE is set to MAILGUN.
+	 */
+	public static final String MAILGUN_DOMAIN = "mailgunDomain";
+
+	/**
+	 * Configuration key for Mailgun sender email address.
+	 * Required when EMAIL_PROVIDER_TYPE is set to MAILGUN.
+	 */
+	public static final String MAILGUN_FROM_EMAIL = "mailgunFromEmail";
+
+	/**
+	 * Configuration key for Mailgun sender display name.
+	 * Optional, defaults to the from email address.
+	 */
+	public static final String MAILGUN_FROM_NAME = "mailgunFromName";
+
+	/**
+	 * Configuration key for Mailgun API region.
+	 * Valid values: "US" (default) or "EU".
+	 */
+	public static final String MAILGUN_REGION = "mailgunRegion";
+
+	/**
+	 * Default Mailgun region (US).
+	 */
+	public static final String DEFAULT_MAILGUN_REGION = "US";
+
+
+	/**
+	 * Configuration key for showing a masked version of the user's email address
+	 * on the OTP form.
+	 */
+	public static final String SHOW_MASKED_EMAIL_ON_OTP_FORM = "showMaskedEmailOnOtpForm";
+
+	/**
+	 * Default setting for showing masked email on the OTP form.
+	 */
+	public static final boolean DEFAULT_SHOW_MASKED_EMAIL_ON_OTP_FORM = false;
+
+	/**
+	 * Configuration key controlling whether users with an email address but no
+	 * stored email-authenticator credential are reported as configured by
+	 * {@link com.mesutpiskin.keycloak.auth.email.EmailAuthenticatorForm#configuredFor}.
+	 * <p>
+	 * When {@code true}, any user with an email is eligible to receive an OTP
+	 * without prior enrolment — useful for admin-provisioned accounts (#112) and
+	 * for showing the plugin in Keycloak's "Try Another Way" alternative list
+	 * (#50).
+	 * </p>
+	 * <p>
+	 * When {@code false} (the default), only users with a stored credential are
+	 * reported as configured, matching Keycloak's convention for built-in
+	 * authenticators. This is the setting "Conditional - User Configured"
+	 * sub-flows expect, so non-enrolled users are not unexpectedly prompted for
+	 * an email OTP (#108 follow-up).
+	 * </p>
+	 */
+	public static final String SKIP_SETUP = "skipSetup";
+
+	/**
+	 * Default value for {@link #SKIP_SETUP}. {@code false} is the strict,
+	 * convention-aligned default so conditional sub-flows behave as admins
+	 * expect; opt in to the permissive behaviour by setting the flag to
+	 * {@code true} on the email-authenticator execution.
+	 */
+	public static final boolean DEFAULT_SKIP_SETUP = false;
+
 	/**
 	 * Millisecond rounding offset used for converting milliseconds to seconds.
 	 * Adding 999ms before division ensures proper ceiling rounding.
