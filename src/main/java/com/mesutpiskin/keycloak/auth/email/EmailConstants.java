@@ -202,32 +202,31 @@ public final class EmailConstants {
 	public static final boolean DEFAULT_SHOW_MASKED_EMAIL_ON_OTP_FORM = false;
 
 	/**
-	 * Configuration key controlling whether users with an email address but no
-	 * stored email-authenticator credential are reported as configured by
-	 * {@link com.mesutpiskin.keycloak.auth.email.EmailAuthenticatorForm#configuredFor}.
+	 * Configuration key controlling whether the enrolment (required action)
+	 * auto-enrols users whose email address is already verified
+	 * ({@link org.keycloak.models.UserModel#isEmailVerified()}), skipping the
+	 * setup verification code.
 	 * <p>
-	 * When {@code true}, any user with an email is eligible to receive an OTP
-	 * without prior enrolment — useful for admin-provisioned accounts (#112) and
-	 * for showing the plugin in Keycloak's "Try Another Way" alternative list
-	 * (#50).
+	 * When {@code true}, users whose email is already verified are enrolled
+	 * silently: the email-authenticator credential is created without sending or
+	 * asking for a setup code, because Keycloak has already proven the user
+	 * controls the mailbox. The credential is still stored, so email 2FA is
+	 * enforced on subsequent logins as usual.
 	 * </p>
 	 * <p>
-	 * When {@code false} (the default), only users with a stored credential are
-	 * reported as configured, matching Keycloak's convention for built-in
-	 * authenticators. This is the setting "Conditional - User Configured"
-	 * sub-flows expect, so non-enrolled users are not unexpectedly prompted for
-	 * an email OTP (#108 follow-up).
+	 * Only opt in when you trust how {@code emailVerified} is set in your realm
+	 * (admin-provisioned accounts, imports or IdP mappers can set it without a
+	 * real verification). Users with an unverified email always go through the
+	 * normal code-verification flow regardless of this flag.
 	 * </p>
 	 */
-	public static final String SKIP_SETUP = "skipSetup";
+	public static final String AUTO_ENROL_IF_EMAIL_VERIFIED = "autoEnrolIfEmailVerified";
 
 	/**
-	 * Default value for {@link #SKIP_SETUP}. {@code false} is the strict,
-	 * convention-aligned default so conditional sub-flows behave as admins
-	 * expect; opt in to the permissive behaviour by setting the flag to
-	 * {@code true} on the email-authenticator execution.
+	 * Default value for {@link #AUTO_ENROL_IF_EMAIL_VERIFIED}. {@code false} is
+	 * the strict default: enrolment always requires a fresh verification code.
 	 */
-	public static final boolean DEFAULT_SKIP_SETUP = false;
+	public static final boolean DEFAULT_AUTO_ENROL_IF_EMAIL_VERIFIED = false;
 
 	/**
 	 * Millisecond rounding offset used for converting milliseconds to seconds.
